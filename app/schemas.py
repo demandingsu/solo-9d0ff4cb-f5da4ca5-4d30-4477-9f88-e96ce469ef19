@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -88,3 +88,96 @@ class AccessResponse(BaseModel):
     date: date
     data_version: int
     segments: List[SegmentOut]
+
+
+# ------------------------------------------------------- access attempts
+
+class AccessAttemptCreate(BaseModel):
+    """One reader access attempt, keyed by the reporter's request number."""
+
+    request_no: str = Field(min_length=1, max_length=100,
+                            description="Reporter-side unique request number; same number is idempotent")
+    access_date: date = Field(description="Day the reader attempted access, YYYY-MM-DD")
+    issn: str
+    article_pub_date: date = Field(description="Publication date of the article, YYYY-MM-DD")
+    package_id: int = Field(gt=0, description="Resource package the reader tried")
+    outcome: str = Field(description="Observed result: success or refused")
+
+    @field_validator("issn")
+    @classmethod
+    def _issn(cls, v: str) -> str:
+        return normalize_issn(v)
+
+    @field_validator("outcome")
+    @classmethod
+    def _outcome(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in ("success", "refused"):
+            raise ValueError("outcome must be 'success' or 'refused'")
+        return v
+
+
+class AccessAttemptOut(BaseModel):
+    request_no: str
+    access_date: date
+    issn: str
+    article_pub_date: date
+    package_id: int
+    outcome: str
+    created_at: str
+    created_version: int
+    data_version: int
+    duplicate: bool = False
+
+
+class CoverageBasisOut(BaseModel):
+    start: date
+    end: date
+    embargo_months: int
+    embargo_cutoff: date
+    covers_article: bool
+    embargo_blocks: bool
+
+
+class AlternativePackageOut(BaseModel):
+    package_id: int
+    name: str
+    matched_coverage: Optional[CoverageBasisOut] = None
+
+
+class VerificationBasisOut(BaseModel):
+    package_id: int
+    package_name: str
+    active: bool
+    license_start: date
+    license_end: date
+    license_covers_access_date: bool
+    coverage_rows: List[CoverageBasisOut]
+    matched_coverage: Optional[CoverageBasisOut] = None
+
+
+class VerificationItem(BaseModel):
+    request_no: str
+    access_date: date
+    issn: str
+    article_pub_date: date
+    package_id: int
+    package_name: str
+    observed_outcome: str
+    expected_access: bool
+    expected_reason: Optional[str] = None
+    expected_reason_text: Optional[str] = None
+    match_result: str
+    mismatch_reason: Optional[str] = None
+    mismatch_reason_text: Optional[str] = None
+    alternative_packages: List[AlternativePackageOut]
+    library_wide_access_loss: bool
+    basis: VerificationBasisOut
+
+
+class VerificationResponse(BaseModel):
+    data_version: int
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    count: int
+    items: List[VerificationItem]

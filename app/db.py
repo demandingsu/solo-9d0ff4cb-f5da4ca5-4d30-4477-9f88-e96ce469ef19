@@ -44,6 +44,26 @@ CREATE TABLE IF NOT EXISTS coverage (
 );
 CREATE INDEX IF NOT EXISTS idx_coverage_issn ON coverage(issn);
 CREATE INDEX IF NOT EXISTS idx_coverage_pkg  ON coverage(package_id);
+
+-- Reader access attempts, keyed by the reporter's request number.
+-- request_no is unique: an identical retransmit is a no-op, a retransmit
+-- with different content is rejected by the API layer.  Rows are never
+-- updated; verification is always recomputed against the current
+-- committed package/coverage state, so retroactive corrections and late
+-- reports are judged by the latest data automatically.
+CREATE TABLE IF NOT EXISTS access_attempts (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_no       TEXT NOT NULL UNIQUE,
+    access_date      TEXT NOT NULL,          -- ISO date the reader tried
+    issn             TEXT NOT NULL,          -- normalized XXXX-XXXX
+    article_pub_date TEXT NOT NULL,          -- ISO date of the article
+    package_id       INTEGER NOT NULL REFERENCES packages(id),
+    outcome          TEXT NOT NULL CHECK (outcome IN ('success', 'refused')),
+    created_at       TEXT NOT NULL,          -- UTC ISO-8601 ingestion time
+    created_version  INTEGER NOT NULL         -- data version after insert
+);
+CREATE INDEX IF NOT EXISTS idx_attempts_access_date ON access_attempts(access_date);
+CREATE INDEX IF NOT EXISTS idx_attempts_request_no  ON access_attempts(request_no);
 """
 
 
